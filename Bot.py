@@ -7,7 +7,7 @@ import os
 # تنظیمات
 # ==================================================
 
-TOKEN = "CFBCHD0BQNKNXRALIZKWGBCKZRTHAEALDOHSZDEPBROPZWSNJXGDQEJUHICWMOHD"
+TOKEN = ""
 
 # شناسه خودت
 MANAGER_ID = "u0HXdRY029886f0a258848773c9d2261"
