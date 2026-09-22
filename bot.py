@@ -27,7 +27,7 @@ if not TOKEN:
 # ساخت ربات
 # =========================
 
-os.chdir("/data")
+print("🚀 Bot starting...")
 bot = Robot(token=TOKEN)
 
 
