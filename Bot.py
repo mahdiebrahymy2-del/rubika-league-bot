@@ -8,6 +8,8 @@ import requests
 # =========================
 
 TOKEN = os.getenv("RUBIKA_TOKEN", "").strip()
+
+OWNER_ID = os.getenv("OWNER_ID", "").strip()
 ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
 
 API_URL = f"https://botapi.rubika.ir/v3/{TOKEN}"
@@ -22,8 +24,11 @@ USERS_FILE = "users.json"
 if not TOKEN:
     raise RuntimeError("RUBIKA_TOKEN تنظیم نشده است.")
 
+if not OWNER_ID:
+    print("⚠️ هشدار: OWNER_ID تنظیم نشده است.")
+
 if not ADMIN_ID:
-    print("هشدار: ADMIN_ID تنظیم نشده است.")
+    print("⚠️ هشدار: ADMIN_ID تنظیم نشده است.")
 
 
 # =========================
@@ -41,7 +46,11 @@ def load_users():
 def save_users(users):
     try:
         with open(USERS_FILE, "w", encoding="utf-8") as file:
-            json.dump(list(users), file, ensure_ascii=False)
+            json.dump(
+                list(users),
+                file,
+                ensure_ascii=False
+            )
     except Exception as e:
         print("خطا در ذخیره کاربران:", e)
 
@@ -50,15 +59,13 @@ users = load_users()
 
 
 # =========================
-# درخواست به API روبیکا
+# API
 # =========================
 
 def api(method, data=None):
     try:
-        url = f"{API_URL}/{method}"
-
         response = requests.post(
-            url,
+            f"{API_URL}/{method}",
             json=data or {},
             timeout=35
         )
@@ -73,7 +80,7 @@ def api(method, data=None):
 
 
 # =========================
-# دریافت پیام‌ها
+# دریافت آپدیت‌ها
 # =========================
 
 def get_updates(offset_id=None):
@@ -109,7 +116,7 @@ def get_updates(offset_id=None):
 def send_message(chat_id, text):
 
     if not chat_id:
-        return
+        return None
 
     return api(
         "sendMessage",
@@ -148,10 +155,7 @@ def get_message_data(update):
         or update.get("sender_id")
     )
 
-    text = (
-        message.get("text")
-        or ""
-    )
+    text = message.get("text") or ""
 
     message_id = (
         message.get("message_id")
@@ -162,15 +166,25 @@ def get_message_data(update):
 
 
 # =========================
-# بررسی ادمین
+# سطح دسترسی
 # =========================
 
-def is_admin(sender_id):
+def is_owner(user_id):
+    return bool(
+        OWNER_ID
+        and user_id
+        and user_id == OWNER_ID
+    )
 
-    return (
-        ADMIN_ID
-        and sender_id
-        and sender_id == ADMIN_ID
+
+def is_admin(user_id):
+    return bool(
+        is_owner(user_id)
+        or (
+            ADMIN_ID
+            and user_id
+            and user_id == ADMIN_ID
+        )
     )
 
 
@@ -185,14 +199,17 @@ def handle_message(chat_id, sender_id, text):
     if not chat_id:
         return
 
-    # ذخیره کاربر
+    # ثبت کاربر
     if chat_id not in users:
         users.add(chat_id)
         save_users(users)
 
     text = text.strip()
 
-    # /start
+    # =====================
+    # START
+    # =====================
+
     if text == "/start":
 
         send_message(
@@ -201,28 +218,34 @@ def handle_message(chat_id, sender_id, text):
             "به ربات خوش آمدی ❤️\n\n"
             "دستورات:\n"
             "🔹 /help - راهنما\n"
-            "🔹 /id - دریافت شناسه\n"
+            "🔹 /id - شناسه شما\n"
         )
 
         return
 
-    # /help
+    # =====================
+    # HELP
+    # =====================
+
     if text == "/help":
 
         send_message(
             chat_id,
             "📚 راهنمای ربات\n\n"
             "/start\n"
-            "شروع کار با ربات\n\n"
+            "شروع ربات\n\n"
             "/id\n"
-            "نمایش شناسه شما\n\n"
+            "نمایش شناسه\n\n"
             "/help\n"
             "نمایش راهنما"
         )
 
         return
 
-    # /id
+    # =====================
+    # ID
+    # =====================
+
     if text == "/id":
 
         send_message(
@@ -233,36 +256,87 @@ def handle_message(chat_id, sender_id, text):
 
         return
 
-    # دستورات ادمین
+    # =====================
+    # اطلاعات مدیر
+    # =====================
+
+    if text == "/panel":
+
+        if not is_admin(sender_id):
+
+            send_message(
+                chat_id,
+                "⛔ شما دسترسی مدیریتی ندارید."
+            )
+
+            return
+
+        if is_owner(sender_id):
+
+            send_message(
+                chat_id,
+                "👑 پنل مالک\n\n"
+                "دسترسی کامل مدیریتی فعال است.\n\n"
+                "/users - تعداد کاربران\n"
+                "/broadcast متن - ارسال همگانی"
+            )
+
+        else:
+
+            send_message(
+                chat_id,
+                "🛡️ پنل ادمین\n\n"
+                "دسترسی ادمین برای شما فعال است."
+            )
+
+        return
+
+    # =====================
+    # تعداد کاربران
+    # =====================
+
     if text == "/users":
 
         if not is_admin(sender_id):
-            send_message(chat_id, "⛔ این دستور فقط برای مدیر ربات است.")
+
+            send_message(
+                chat_id,
+                "⛔ این دستور مخصوص مدیران است."
+            )
+
             return
 
         send_message(
             chat_id,
-            f"👥 تعداد کاربران ثبت‌شده:\n{len(users)}"
+            f"👥 تعداد کاربران:\n{len(users)}"
         )
 
         return
 
-    # ارسال همگانی
+    # =====================
+    # Broadcast
+    # =====================
+
     if text.startswith("/broadcast "):
 
-        if not is_admin(sender_id):
-            send_message(chat_id, "⛔ این دستور فقط برای مدیر ربات است.")
+        if not is_owner(sender_id):
+
+            send_message(
+                chat_id,
+                "⛔ فقط مالک ربات اجازه این دستور را دارد."
+            )
+
             return
 
         message = text[len("/broadcast "):].strip()
 
         if not message:
+
             send_message(
                 chat_id,
-                "❌ متن پیام را وارد کن.\n\n"
-                "مثال:\n"
-                "/broadcast سلام به همه"
+                "❌ متن پیام را وارد کن."
             )
+
             return
 
         success = 0
@@ -271,6 +345,7 @@ def handle_message(chat_id, sender_id, text):
         for user_chat_id in list(users):
 
             try:
+
                 result = send_message(
                     user_chat_id,
                     message
@@ -284,18 +359,22 @@ def handle_message(chat_id, sender_id, text):
                 time.sleep(0.2)
 
             except:
+
                 failed += 1
 
         send_message(
             chat_id,
-            f"📢 ارسال همگانی انجام شد.\n\n"
+            f"📢 ارسال انجام شد.\n\n"
             f"✅ موفق: {success}\n"
             f"❌ ناموفق: {failed}"
         )
 
         return
 
-    # پاسخ ساده به پیام‌های معمولی
+    # =====================
+    # پیام معمولی
+    # =====================
+
     if text:
 
         send_message(
@@ -325,7 +404,9 @@ while True:
 
             try:
 
-                chat_id, sender_id, text, message_id = get_message_data(update)
+                chat_id, sender_id, text, message_id = (
+                    get_message_data(update)
+                )
 
                 print(
                     f"پیام جدید | "
@@ -342,7 +423,10 @@ while True:
 
             except Exception as e:
 
-                print("خطا در پردازش پیام:", e)
+                print(
+                    "خطا در پردازش پیام:",
+                    e
+                )
 
         time.sleep(2)
 
@@ -353,5 +437,9 @@ while True:
 
     except Exception as e:
 
-        print("خطای اصلی:", e)
+        print(
+            "خطای اصلی:",
+            e
+        )
+
         time.sleep(5)
